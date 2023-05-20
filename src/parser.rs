@@ -342,7 +342,7 @@ impl<'a> Parser<'a> {
     /// - "float iso" 150
     fn read_param(&mut self) -> Result<Param<'a>> {
         let type_and_name = self.read_str()?;
-        let mut values = Vec::new();
+        let mut param = Param::new(type_and_name)?;
 
         // Either [ or a single value.
         let value = self.read_token()?;
@@ -359,14 +359,14 @@ impl<'a> Parser<'a> {
                     return Err(Error::InvalidOptionValue);
                 }
 
-                values.push(value)
+                param.add_token(value)?;
             }
         } else {
             // Single value
-            values.push(value);
+            param.add_token(value)?;
         }
 
-        Ok(Param::new(type_and_name, values))
+        Ok(param)
     }
 
     #[inline]
@@ -378,7 +378,7 @@ impl<'a> Parser<'a> {
                 // Each parameter starts with a quoted string
                 Some(token) if token.is_quote() => {
                     let param = self.read_param()?;
-                    list.push(param);
+                    list.add(param)?;
                 }
                 // Other token, break loop
                 Some(_) => break,
@@ -393,6 +393,8 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::param::ParamType;
+
     use super::*;
 
     #[test]
@@ -457,10 +459,13 @@ Option \"string filename\" \"foo.exr\"
         ",
         );
 
-        let expected = Param::new("string filename", vec![Token::new("\"foo.exr\"")]);
-        assert_eq!(parser.parse_next().unwrap(), Element::Option(expected));
+        let mut expected = Param::new("string filename").unwrap();
+        expected.add_token(Token::new("\"foo.exr\"")).unwrap();
+        assert_eq!(
+            parser.parse_next().unwrap(),
+            Element::Option(expected.clone())
+        );
 
-        let expected = Param::new("string filename", vec![Token::new("\"foo.exr\"")]);
         assert_eq!(parser.parse_next().unwrap(), Element::Option(expected));
     }
 
@@ -484,11 +489,13 @@ Film \"rgb\"
                 assert_eq!(ty, "rgb");
                 assert_eq!(params.len(), 5);
 
-                let param = &params[0];
-                assert_eq!(param.type_and_name, "string filename");
+                let param = params.get("filename").unwrap();
+                assert_eq!(param.name, "filename");
+                assert_eq!(param.ty, ParamType::String);
 
-                let param = &params[3];
-                assert_eq!(param.type_and_name, "float iso");
+                let param = params.get("iso").unwrap();
+                assert_eq!(param.name, "iso");
+                assert_eq!(param.ty, ParamType::Float)
             }
             _ => panic!("Unexpected element type"),
         }

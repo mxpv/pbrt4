@@ -1,4 +1,7 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::{
+    num::{ParseFloatError, ParseIntError},
+    str::ParseBoolError,
+};
 
 use thiserror::Error;
 
@@ -24,6 +27,10 @@ pub enum Error {
     #[error("Unable to parse number")]
     ParseInt(#[from] ParseIntError),
 
+    /// Failed to parse boolean.
+    #[error("Unable to parse bool")]
+    ParseBool(#[from] ParseBoolError),
+
     /// Directive is unknown.
     #[error("Unsupported directive")]
     UnknownDirective,
@@ -37,4 +44,14 @@ pub enum Error {
 
     #[error("Unsupported coordinate system")]
     UnknownCoordinateSystem,
+
+    #[error("Invalid parameter name")]
+    InvalidParamName,
+
+    /// Unsupported parameter type.
+    #[error("Parameter type is invalid")]
+    InvalidParamType,
+
+    #[error("Found duplicated parameter")]
+    DuplicatedParamName,
 }
