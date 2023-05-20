@@ -34,4 +34,7 @@ pub enum Error {
     /// Failed to parse option's `[ value ]`
     #[error("Unable to parse option value")]
     InvalidOptionValue,
+
+    #[error("Unsupported coordinate system")]
+    UnknownCoordinateSystem,
 }

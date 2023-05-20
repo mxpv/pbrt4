@@ -2,6 +2,8 @@
 
 use std::str::FromStr;
 
+use crate::{Error, Result};
+
 /// The coordinate system.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub enum CoordinateSystem {
@@ -15,14 +17,14 @@ pub enum CoordinateSystem {
 }
 
 impl FromStr for CoordinateSystem {
-    type Err = (); // TODO: Use error type
+    type Err = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         match s {
             "cameraworld" => Ok(CoordinateSystem::CameraWorld),
             "camera" => Ok(CoordinateSystem::Camera),
             "world" => Ok(CoordinateSystem::World),
-            _ => Err(()),
+            _ => Err(Error::UnknownCoordinateSystem),
         }
     }
 }

@@ -1,44 +1,42 @@
-use std::{
-    iter::Peekable,
-    ops::{Deref, DerefMut},
-};
+//! Directives parser.
+
+use std::iter::Peekable;
 
 use crate::{
+    param::{Param, ParamList},
     token::{Directive, Token},
     tokenizer::Tokenizer,
-    Error,
+    Error, Result,
 };
-
-type Result<T> = std::result::Result<T, Error>;
 
 /// Parsed directive.
 #[derive(Debug, PartialEq)]
 pub enum Element<'a> {
     Include(&'a str),
     Import(&'a str),
-    Option(Parameter<'a>),
+    Option(Param<'a>),
     Film {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     ColorSpace {
         ty: &'a str,
     },
     Camera {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     Sampler {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     Integrator {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     Accelerator {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     CoordinateSystem {
         name: &'a str,
@@ -96,23 +94,23 @@ pub enum Element<'a> {
     /// `Attribute "target" parameter-list`
     Attribute {
         target: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     LightSource {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     AreaLightSource {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     Material {
         ty: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     MakeNamedMaterial {
         name: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     NamedMaterial {
         name: &'a str,
@@ -122,12 +120,12 @@ pub enum Element<'a> {
         name: &'a str,
         ty: &'a str,
         class: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     /// `Shape "name" parameter-list`
     Shape {
         name: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     ObjectBegin {
         name: &'a str,
@@ -138,7 +136,7 @@ pub enum Element<'a> {
     },
     MakeNamedMedium {
         name: &'a str,
-        params: ParameterList<'a>,
+        params: ParamList<'a>,
     },
     MediumInterface {
         interior: &'a str,
@@ -342,7 +340,7 @@ impl<'a> Parser<'a> {
     /// - "integer indices" [ 0 1 2 0 2 3 ]
     /// - "float scale" [10]
     /// - "float iso" 150
-    fn read_param(&mut self) -> Result<Parameter<'a>> {
+    fn read_param(&mut self) -> Result<Param<'a>> {
         let type_and_name = self.read_str()?;
         let mut values = Vec::new();
 
@@ -368,12 +366,12 @@ impl<'a> Parser<'a> {
             values.push(value);
         }
 
-        Ok(Parameter::new(type_and_name, values))
+        Ok(Param::new(type_and_name, values))
     }
 
     #[inline]
-    fn read_param_list(&mut self) -> Result<ParameterList<'a>> {
-        let mut list = ParameterList::default();
+    fn read_param_list(&mut self) -> Result<ParamList<'a>> {
+        let mut list = ParamList::default();
 
         loop {
             match self.tokenizer.peek() {
@@ -390,38 +388,6 @@ impl<'a> Parser<'a> {
         }
 
         Ok(list)
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Parameter<'a> {
-    type_and_name: &'a str,
-    values: Vec<Token<'a>>,
-}
-
-impl<'a> Parameter<'a> {
-    fn new(type_and_name: &'a str, values: Vec<Token<'a>>) -> Self {
-        Self {
-            type_and_name,
-            values,
-        }
-    }
-}
-
-#[derive(Default, Debug, PartialEq)]
-pub struct ParameterList<'a>(Vec<Parameter<'a>>);
-
-impl<'a> Deref for ParameterList<'a> {
-    type Target = Vec<Parameter<'a>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'a> DerefMut for ParameterList<'a> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
@@ -491,10 +457,10 @@ Option \"string filename\" \"foo.exr\"
         ",
         );
 
-        let expected = Parameter::new("string filename", vec![Token::new("\"foo.exr\"")]);
+        let expected = Param::new("string filename", vec![Token::new("\"foo.exr\"")]);
         assert_eq!(parser.parse_next().unwrap(), Element::Option(expected));
 
-        let expected = Parameter::new("string filename", vec![Token::new("\"foo.exr\"")]);
+        let expected = Param::new("string filename", vec![Token::new("\"foo.exr\"")]);
         assert_eq!(parser.parse_next().unwrap(), Element::Option(expected));
     }
 
