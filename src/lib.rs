@@ -6,6 +6,7 @@ mod parser;
 mod scene;
 mod token;
 mod tokenizer;
+pub mod types;
 
 pub use error::Error;
 pub use parser::*;
