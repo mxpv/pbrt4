@@ -5,6 +5,7 @@ use crate::token::Token;
 pub(crate) struct Tokenizer<'a> {
     str: &'a str,
     chars: Peekable<CharIndices<'a>>,
+    skip_comments: bool,
 }
 
 impl<'a> Tokenizer<'a> {
@@ -13,7 +14,13 @@ impl<'a> Tokenizer<'a> {
         Self {
             str,
             chars: str.char_indices().peekable(),
+            skip_comments: false,
         }
+    }
+
+    /// Skip comment tokens when iterating.
+    pub fn skip_comments(&mut self) {
+        self.skip_comments = true;
     }
 
     fn rewind_until(&mut self, chars: &[char]) -> usize {
@@ -67,10 +74,19 @@ impl<'a> Iterator for Tokenizer<'a> {
                 }
                 '#' => {
                     let end = self.rewind_until(&['\r', '\n']);
+
+                    if self.skip_comments {
+                        continue;
+                    }
+
                     self.token(start, end + 1)
                 }
                 _ => {
-                    let end = self.rewind_until(&[' ', '\r', '\n', '\t', '"', '[', ']']);
+                    let mut end = self.rewind_until(&[' ', '\r', '\n', '\t', '"', '[', ']']);
+                    if end == 0 {
+                        end = start;
+                    }
+
                     self.token(start, end + 1)
                 }
             };
@@ -146,6 +162,22 @@ Scale
     }
 
     #[test]
+    fn skip_comments() {
+        let str = r#"
+# Comment
+
+Scale
+
+"#;
+
+        let mut t = Tokenizer::new(str);
+        t.skip_comments();
+
+        assert_eq!(t.next(), Some(Token::new("Scale")));
+        assert_eq!(t.next(), None);
+    }
+
+    #[test]
     fn comment_middle() {
         let str = r#"
 Scale
@@ -207,6 +239,18 @@ Scale
         let mut t = Tokenizer::new("\"");
 
         assert_eq!(t.next(), Some(Token::new("\"")));
+        assert_eq!(t.next(), None);
+    }
+
+    #[test]
+    fn parse_scale() {
+        let mut t = Tokenizer::new("Scale -1 1 1");
+
+        assert_eq!(t.next(), Some(Token::new("Scale")));
+        assert_eq!(t.next(), Some(Token::new("-1")));
+        assert_eq!(t.next(), Some(Token::new("1")));
+        assert_eq!(t.next(), Some(Token::new("1")));
+
         assert_eq!(t.next(), None);
     }
 }

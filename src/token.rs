@@ -1,6 +1,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use crate::Error;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Token<'a> {
     str: &'a str,
@@ -12,7 +14,8 @@ impl<'a> Token<'a> {
     }
 
     /// Returns `true` if token is a comment.
-    pub fn is_comment(&self) -> bool {
+    #[allow(dead_code)] // For unit testing
+    fn is_comment(&self) -> bool {
         self.str.starts_with('#')
     }
 
@@ -31,8 +34,23 @@ impl<'a> Token<'a> {
         Directive::from_str(self.str).is_ok()
     }
 
+    /// Get directive.
+    pub fn directive(&self) -> Option<Directive> {
+        Directive::from_str(self.str).ok()
+    }
+
+    /// Whether token is `[`.
+    pub fn is_open_brace(&self) -> bool {
+        self.str == "["
+    }
+
+    /// Whether token is `]`
+    pub fn is_close_brace(&self) -> bool {
+        self.str == "]"
+    }
+
     /// Return a string without quotes or `None` if the string is not a quoted string.
-    pub fn unquote(&self) -> Option<&str> {
+    pub fn unquote(&self) -> Option<&'a str> {
         if self.is_quote() {
             let len = self.str.len();
             Some(&self.str[1..len - 1])
@@ -97,9 +115,9 @@ pub enum Directive {
     Sampler,
     ColorSpace,
     Film,
-    Filters,
     Integrator,
     Accelerator,
+    PixelFilter,
 
     MakeNamedMedium,
     MediumInterface,
@@ -132,7 +150,7 @@ impl fmt::Display for Directive {
 }
 
 impl FromStr for Directive {
-    type Err = (); // TODO: Use error type
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let e = match s {
@@ -154,7 +172,6 @@ impl FromStr for Directive {
             "Sampler" => Directive::Sampler,
             "ColorSpace" => Directive::ColorSpace,
             "Film" => Directive::Film,
-            "Filters" => Directive::Filters,
             "Integrator" => Directive::Integrator,
             "Accelerator" => Directive::Accelerator,
             "MakeNamedMedium" => Directive::MakeNamedMedium,
@@ -174,7 +191,8 @@ impl FromStr for Directive {
             "Texture" => Directive::Texture,
             "MakeNamedMaterial" => Directive::MakeNamedMaterial,
             "NamedMaterial" => Directive::NamedMaterial,
-            _ => return Err(()),
+            "PixelFilter" => Directive::PixelFilter,
+            _ => return Err(Error::UnknownDirective),
         };
 
         Ok(e)
