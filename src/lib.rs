@@ -1,4 +1,4 @@
-//! PBRT v1 file format loader.
+//! PBRT v4 file format parser and loader.
 
 mod error;
 pub mod param;

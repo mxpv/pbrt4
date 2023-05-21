@@ -15,3 +15,14 @@ A Rust crate to load [pbrt-v4](https://pbrt.org/fileformat-v4) files.
 - [pbrt-v4](https://github.com/mmp/pbrt-v4) repo.
 - The file format [documentation](https://pbrt.org/fileformat-v4).
 - [pbrt-v4-scenes](https://github.com/mmp/pbrt-v4-scenes) repo.
+
+## Example
+
+```rust
+let data = fs::read_to_string("file.pbrt")?;
+let scene = Scene::load(&data)?;
+
+for shape in scene.shapes {
+    println!("{:?}", shape)
+}
+```

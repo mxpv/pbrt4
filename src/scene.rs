@@ -35,11 +35,13 @@ pub struct State<'a> {
     pub texture_params: ParamList<'a>,
 }
 
+#[derive(Debug)]
 pub struct CameraEntity {
     pub params: Camera,
     pub transform: Mat4,
 }
 
+#[derive(Debug)]
 pub struct ShapeEntity {
     pub params: Shape,
     pub reverse_orientation: bool,
