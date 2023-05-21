@@ -1,8 +1,11 @@
 //! Data structures that can be deserialized from a parameter list.
 
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
-use crate::{param::ParamList, Error, Result};
+use crate::{
+    param::{Param, ParamList},
+    Error, Result,
+};
 
 /// The coordinate system.
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -61,6 +64,12 @@ impl Default for Options {
             mse_reference_out: None,
             render_coord_sys: CoordinateSystem::CameraWorld,
         }
+    }
+}
+
+impl Options {
+    pub fn apply(&mut self, _option: Param) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -144,32 +153,113 @@ impl Film {
                     .to_owned(),
             },
             "spectral" => FilmType::Spectral {
-                nbuckets: params.integer("nbuckets").unwrap_or(16),
-                lambda_min: params.float("lambdamin").unwrap_or(360.0),
-                lambda_max: params.float("lambdamax").unwrap_or(830.0),
+                nbuckets: params.integer("nbuckets", 16),
+                lambda_min: params.float("lambdamin", 360.0),
+                lambda_max: params.float("lambdamax", 830.0),
             },
             _ => unimplemented!(),
         };
 
         let film = Film {
-            xresolution: params.integer("xresolution").unwrap_or(1280),
-            yresolution: params.integer("yresolution").unwrap_or(720),
+            xresolution: params.integer("xresolution", 1280),
+            yresolution: params.integer("yresolution", 720),
             crop_window: params
                 .floats("cropwindow")
                 .unwrap_or(&[0.0, 1.0, 0.0, 1.0])
                 .try_into()
                 .map_err(|_| Error::ParseSlice)?,
-            diagonal: params.float("diagonal").unwrap_or(35.0),
+            diagonal: params.float("diagonal", 35.0),
             filename: params.string("filename").unwrap_or("pbrt.exr").to_owned(),
             save_fp16: params.boolean("savefp16").unwrap_or(true),
-            iso: params.float("iso").unwrap_or(100.0),
-            white_balance: params.float("whitebalance").unwrap_or(0.0),
+            iso: params.float("iso", 100.0),
+            white_balance: params.float("whitebalance", 0.0),
             sensor: params.string("sensor").unwrap_or("cie1931").to_owned(),
-            max_component_value: params.float("maxcomponentvalue").unwrap_or(f32::MAX),
+            max_component_value: params.float("maxcomponentvalue", f32::MAX),
             ty,
         };
 
         Ok(film)
+    }
+}
+
+pub enum Camera {
+    Orthographic {
+        /// The time at which the virtual camera shutter opens.
+        shutter_open: f32,
+        /// The time at which the virtual camera shutter closes.
+        shutter_close: f32,
+    },
+    Perspective {
+        /// The time at which the virtual camera shutter opens.
+        shutter_open: f32,
+        /// The time at which the virtual camera shutter closes.
+        shutter_close: f32,
+        /// Specifies the field of view for the perspective camera.
+        fov: f32,
+    },
+    /// The `RealisticCamera` simulates imaging from light rays passing through complex lens systems.
+    Realistic {
+        /// The time at which the virtual camera shutter opens.
+        shutter_open: f32,
+        /// The time at which the virtual camera shutter closes.
+        shutter_close: f32,
+        /// Specifies the name of a lens description file that gives the collection of lens elements in the lens system.
+        lensfile: Option<String>,
+        /// Diameter of the lens system's aperture, specified in mm. The smaller the aperture,
+        /// the less light reaches the film plane, but the greater the range of distances that are in focus.
+        aperture_diameter: f32,
+        /// Distance in meters at which the lens system is focused.
+        focus_distance: f32,
+        /// Allows specifying the shape of the camera aperture, which is circular by default.
+        /// The values of "gaussian", "square", "pentagon", and "star" are associated with built-in aperture shapes;
+        /// other values are interpreted as filenames specifying an image to be used to specify the shape.
+        aperture: Option<String>,
+    },
+    /// The SphericalCamera captures light arriving at the camera from all directions.
+    Spherical {
+        /// The time at which the virtual camera shutter opens.
+        shutter_open: f32,
+        /// The time at which the virtual camera shutter closes.
+        shutter_close: f32,
+        /// By default, an area-preserving mapping based on an octahedral encoding of the unit sphere is used.
+        /// Alternatively, an equirectangular mapping can be specified using "equirectangular".
+        mapping: String,
+    },
+}
+
+impl Camera {
+    pub fn new(ty: &str, params: ParamList) -> Result<Camera> {
+        // Two parameters that set the camera's shutter open times are common to all cameras in pbrt.
+        let shutter_open = params.float("shutteropen", 0.0);
+        let shutter_close = params.float("shutterclose", 1.0);
+
+        let camera = match ty {
+            "orthographic" => Camera::Orthographic {
+                shutter_open,
+                shutter_close,
+            },
+            "perspective" => Camera::Perspective {
+                shutter_open,
+                shutter_close,
+                fov: params.float("fov", 90.0),
+            },
+            "realistic" => Camera::Realistic {
+                shutter_open,
+                shutter_close,
+                lensfile: params.string("lensfile").map(|str| str.to_string()),
+                aperture_diameter: params.float("aperturediameter", 1.0),
+                focus_distance: params.float("focusdistance", 10.0),
+                aperture: params.string("aperture").map(|str| str.to_string()),
+            },
+            "spherical" => Camera::Spherical {
+                shutter_open,
+                shutter_close,
+                mapping: params.string("mapping").unwrap_or("equalarea").to_string(),
+            },
+            _ => return Err(Error::InvalidCameraType),
+        };
+
+        Ok(camera)
     }
 }
 
@@ -209,7 +299,7 @@ impl Integrator {
     pub fn new(ty: &str, params: ParamList) -> Result<Integrator> {
         let integ = match ty {
             "volpath" => Integrator::VolPath {
-                max_depth: params.integer("maxdepth").unwrap_or(5),
+                max_depth: params.integer("maxdepth", 5),
             },
             _ => unimplemented!(),
         };
@@ -218,8 +308,97 @@ impl Integrator {
     }
 }
 
+pub enum BvhSplitMethod {
+    /// Denotes the surface area heuristic.
+    Sah,
+    /// Splits each node at its midpoint along the split axis.
+    Middle,
+    /// Splits the current group of primitives into two equal-sized sets
+    Equal,
+    /// Selects the HLBVH algorithm, which parallelizes well.
+    Hlbvh,
+}
+
+pub enum Accelerator {
+    Bvh {
+        /// Maximum number of primitives to allow in a node in the tree.
+        max_node_prims: i32,
+        /// Method to use to partition the primitives when building the tree.
+        split_method: BvhSplitMethod,
+    },
+    KdTree {
+        /// The value of the cost function that estimates the expected cost of
+        /// performing a ray-object intersection, for use in building the kd-tree.
+        intersect_cost: i32,
+        /// Estimated cost for traversing a ray through a kd-tree node.
+        traversal_cost: i32,
+        /// "Bonus" factor for kd-tree nodes that represent empty space.
+        empty_bonus: f32,
+        /// Maximum number of primitives to store in kd-tree node.
+        max_prims: i32,
+        /// Maximum depth of the kd-tree. If negative, the kd-tree chooses a maximum depth
+        /// based on the number of primitives to be stored in it.
+        max_depth: i32,
+    },
+}
+
+impl Accelerator {
+    pub fn new(ty: &str, params: ParamList) -> Result<Accelerator> {
+        let acc = match ty {
+            "bvh" => Accelerator::Bvh {
+                max_node_prims: params.integer("maxnodeprims", 4),
+                split_method: match params.string("splitmethod").unwrap_or("sah") {
+                    "sah" => BvhSplitMethod::Sah,
+                    "middle" => BvhSplitMethod::Middle,
+                    "equal" => BvhSplitMethod::Equal,
+                    "hlbvh" => BvhSplitMethod::Hlbvh,
+                    _ => return Err(Error::InvalidString),
+                },
+            },
+            "kdtree" => Accelerator::KdTree {
+                intersect_cost: params.integer("intersectcost", 5),
+                traversal_cost: params.integer("traversalcost", 1),
+                empty_bonus: params.float("emptybonus", 0.5),
+                max_prims: params.integer("maxprims", 1),
+                max_depth: params.integer("maxdepth", -1),
+            },
+            _ => return Err(Error::InvalidString),
+        };
+
+        Ok(acc)
+    }
+}
+
+// The Sampler generates samples for the image, time, lens, and Monte Carlo integration.
+pub enum Sampler {
+    Halton,
+    Independent,
+    PaddedSobol,
+    Sobol,
+    Stratified,
+    ZSobol,
+}
+
+impl Sampler {
+    pub fn new(ty: &str, _params: ParamList) -> Result<Sampler> {
+        let sampler = match ty {
+            "halton" => Sampler::Halton,
+            "independent" => Sampler::Independent,
+            "paddedsobol" => Sampler::PaddedSobol,
+            "sobol" => Sampler::Sobol,
+            "stratified" => Sampler::Stratified,
+            "zsobol" => Sampler::ZSobol,
+            _ => return Err(Error::InvalidObjectType),
+        };
+
+        Ok(sampler)
+    }
+}
+
 /// Light sources cast illumination in the scene.
 pub enum Light {
+    /// The "distant" light source represents a directional light source "at infinity";
+    /// In other words, it illuminates the scene with light arriving from a single direction.
     Distant,
     GonioPhotometric,
     /// The "infinite" light represents an infinitely far away light source that
@@ -228,6 +407,8 @@ pub enum Light {
         /// The environment map to use for the infinite area light.
         /// If no filename is provided, the light will emit the same amount of radiance from every direction.
         filename: Option<String>,
+        /// The spectral distribution of emission from the light.
+        l: Option<[f32; 3]>,
     },
     Point,
     Projection,
@@ -241,6 +422,10 @@ impl Light {
             "goniometric" => Light::GonioPhotometric,
             "infinite" => Light::Infinite {
                 filename: params.string("filename").map(|f| f.to_owned()),
+                l: match params.floats("L") {
+                    Some(f) => Some(f.try_into().map_err(|_| Error::ParseSlice)?),
+                    None => None,
+                },
             },
             "point" => Light::Point,
             "projection" => Light::Projection,
@@ -249,6 +434,57 @@ impl Light {
         };
 
         Ok(light)
+    }
+}
+
+pub enum TextureType {
+    Float,
+    Spectrum,
+}
+
+pub struct Texture {
+    pub name: String,
+    pub ty: TextureType,
+    pub class: String,
+}
+
+impl Texture {
+    pub fn new(name: &str, ty: &str, class: &str, _params: ParamList) -> Result<Texture> {
+        let ty = match ty {
+            "spectrum" => TextureType::Spectrum,
+            "float" => TextureType::Float,
+            _ => return Err(Error::InvalidObjectType),
+        };
+
+        // TODO: Parse parameters.
+
+        Ok(Texture {
+            name: name.to_string(),
+            ty,
+            class: class.to_string(),
+        })
+    }
+}
+
+/// Materials specify the light scattering properties of surfaces in the scene.
+pub struct Material {
+    pub ty: String,
+}
+
+impl Material {
+    pub fn new(
+        name: &str,
+        _params: ParamList,
+        _texture_map: &HashMap<String, usize>,
+    ) -> Result<Material> {
+        // Parameters to materials are distinctive in that textures can be used to
+        // specify spatially-varying values for the parameters.
+
+        // TODO: Parse material parameters.
+
+        Ok(Material {
+            ty: name.to_string(),
+        })
     }
 }
 
@@ -312,35 +548,35 @@ impl Shape {
     pub fn new(ty: &str, params: ParamList) -> Result<Self> {
         // All shapes take an optional "alpha" parameter that can be
         // used to define a mask that cuts away regions of a surface.
-        let alpha = params.float("alpha").unwrap_or(1.0);
+        let alpha = params.float("alpha", 1.0);
 
         let shape = match ty {
             "cylinder" => Shape::Cylinder {
                 alpha,
-                radius: params.float("radius").unwrap_or(1.0),
-                zmin: params.float("zmin").unwrap_or(-1.0),
-                zmax: params.float("zmax").unwrap_or(1.0),
-                phimax: params.float("phimax").unwrap_or(360.0),
+                radius: params.float("radius", 1.0),
+                zmin: params.float("zmin", -1.0),
+                zmax: params.float("zmax", 1.0),
+                phimax: params.float("phimax", 360.0),
             },
             "disk" => Shape::Disk {
                 alpha,
-                height: params.float("height").unwrap_or(0.0),
-                radius: params.float("radius").unwrap_or(1.0),
-                innerradius: params.float("innerradius").unwrap_or(0.0),
-                phimax: params.float("phimax").unwrap_or(360.0),
+                height: params.float("height", 0.0),
+                radius: params.float("radius", 1.0),
+                innerradius: params.float("innerradius", 0.0),
+                phimax: params.float("phimax", 360.0),
             },
             "sphere" => {
-                let radius = params.float("radius").unwrap_or(1.0);
+                let radius = params.float("radius", 1.0);
 
-                let zmin = params.float("zmin").unwrap_or(-radius);
-                let zmax = params.float("zmax").unwrap_or(radius);
+                let zmin = params.float("zmin", -radius);
+                let zmax = params.float("zmax", radius);
 
                 Shape::Sphere {
                     alpha,
                     radius,
                     zmin,
                     zmax,
-                    phimax: params.float("phimax").unwrap_or(360.0),
+                    phimax: params.float("phimax", 360.0),
                 }
             }
             "trianglemesh" => {
@@ -368,6 +604,15 @@ impl Shape {
         };
 
         Ok(shape)
+    }
+}
+
+pub struct Medium {}
+
+impl Medium {
+    pub fn new(_params: ParamList) -> Result<Self> {
+        // TODO: Handle medium object initialization.
+        Ok(Medium {})
     }
 }
 

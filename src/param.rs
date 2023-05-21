@@ -180,12 +180,16 @@ impl<'a> ParamList<'a> {
         self.get(name).and_then(|param| param.as_booleans())
     }
 
-    pub fn float(&self, name: &str) -> Option<f32> {
-        self.floats(name).and_then(|floats| floats.first().copied())
+    pub fn float(&self, name: &str, default: f32) -> f32 {
+        self.floats(name)
+            .and_then(|floats| floats.first().copied())
+            .unwrap_or(default)
     }
 
-    pub fn integer(&self, name: &str) -> Option<i32> {
-        self.integers(name).and_then(|ints| ints.first().copied())
+    pub fn integer(&self, name: &str, default: i32) -> i32 {
+        self.integers(name)
+            .and_then(|ints| ints.first().copied())
+            .unwrap_or(default)
     }
 
     pub fn string(&self, name: &str) -> Option<&str> {
@@ -195,6 +199,12 @@ impl<'a> ParamList<'a> {
     pub fn boolean(&self, name: &str) -> Option<bool> {
         self.booleans(name)
             .and_then(|booleans| booleans.first().copied())
+    }
+
+    pub fn extend(&mut self, other: &ParamList<'a>) {
+        for (k, v) in &other.0 {
+            self.0.insert(k, v.clone());
+        }
     }
 }
 

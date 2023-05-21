@@ -70,4 +70,10 @@ pub enum Error {
 
     #[error("Attempt to restore CoordSysTransform matrix with invalid name")]
     InvalidMatrixName,
+
+    #[error("Invalid camera type")]
+    InvalidCameraType,
+
+    #[error("Unknown object type")]
+    InvalidObjectType,
 }
