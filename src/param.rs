@@ -118,6 +118,20 @@ impl<'a> Param<'a> {
             _ => None,
         }
     }
+
+    pub fn as_strings(&self) -> Option<&[&str]> {
+        match &self.values {
+            Values::Strings(ref s) => Some(s.as_slice()),
+            _ => None,
+        }
+    }
+
+    pub fn as_booleans(&self) -> Option<&[bool]> {
+        match &self.values {
+            Values::Booleans(ref b) => Some(b.as_slice()),
+            _ => None,
+        }
+    }
 }
 
 /// Parameters collection.
@@ -144,9 +158,43 @@ impl<'a> ParamList<'a> {
         self.0.len()
     }
 
+    /// Returns `true` when the list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Attempt to get parameter as a slice of `f32`.
-    pub fn get_floats(&self, name: &str) -> Option<&[f32]> {
+    pub fn floats(&self, name: &str) -> Option<&[f32]> {
         self.get(name).and_then(|param| param.as_floats())
+    }
+
+    pub fn integers(&self, name: &str) -> Option<&[i32]> {
+        self.get(name).and_then(|param| param.as_integers())
+    }
+
+    pub fn strings(&self, name: &str) -> Option<&[&str]> {
+        self.get(name).and_then(|param| param.as_strings())
+    }
+
+    pub fn booleans(&self, name: &str) -> Option<&[bool]> {
+        self.get(name).and_then(|param| param.as_booleans())
+    }
+
+    pub fn float(&self, name: &str) -> Option<f32> {
+        self.floats(name).and_then(|floats| floats.first().copied())
+    }
+
+    pub fn integer(&self, name: &str) -> Option<i32> {
+        self.integers(name).and_then(|ints| ints.first().copied())
+    }
+
+    pub fn string(&self, name: &str) -> Option<&str> {
+        self.strings(name).and_then(|strs| strs.first().copied())
+    }
+
+    pub fn boolean(&self, name: &str) -> Option<bool> {
+        self.booleans(name)
+            .and_then(|booleans| booleans.first().copied())
     }
 }
 

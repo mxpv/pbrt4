@@ -31,6 +31,10 @@ pub enum Error {
     #[error("Unable to parse bool")]
     ParseBool(#[from] ParseBoolError),
 
+    /// Unable to cast from slice to array.
+    #[error("Unexpected number of arguments in array")]
+    ParseSlice,
+
     /// Directive is unknown.
     #[error("Unsupported directive")]
     UnknownDirective,
@@ -54,4 +58,16 @@ pub enum Error {
 
     #[error("Found duplicated parameter")]
     DuplicatedParamName,
+
+    #[error("Duplicated WorldBegin statement")]
+    WorldAlreadyStarted,
+
+    #[error("Element is not allowed")]
+    ElementNotAllowed,
+
+    #[error("Too many AttributeEnd")]
+    TooManyEndAttributes,
+
+    #[error("Attempt to restore CoordSysTransform matrix with invalid name")]
+    InvalidMatrixName,
 }

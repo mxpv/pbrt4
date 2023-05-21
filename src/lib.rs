@@ -1,7 +1,7 @@
 //! PBRT v1 file format loader.
 
 mod error;
-mod param;
+pub mod param;
 mod parser;
 mod scene;
 mod token;
