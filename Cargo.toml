@@ -1,10 +1,10 @@
 [package]
 name = "pbrt4"
+description = "Lightweight and fast PBRT v4 file parser"
 version = "0.1.0"
 edition = "2021"
-repository = "github.com/mxpv/pbrt4"
-license = "Apache 2.0"
-description = "Lightweight and fast PBRT v4 file parser"
+repository = "https://github.com/mxpv/pbrt4"
+license = "Apache-2.0"
 categories = ["parsing", "rendering", "rendering::data-formats", "science"]
 keywords = ["pbrt", "pbrt-v4", "ray-tracing"]
 
