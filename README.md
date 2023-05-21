@@ -1,6 +1,10 @@
 # pbrt4
 
 [![CI](https://github.com/mxpv/pbrt4/actions/workflows/ci.yml/badge.svg)](https://github.com/mxpv/pbrt4/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/pbrt4)](https://crates.io/crates/pbrt4)
+[![docs.rs](https://img.shields.io/docsrs/pbrt4)](https://docs.rs/pbrt4/latest/pbrt4/)
+[![Crates.io](https://img.shields.io/crates/l/pbrt4)](https://github.com/mxpv/pbrt4/blob/main/LICENSE)
+[![dependency status](https://deps.rs/repo/github/mxpv/pbrt4/status.svg)](https://deps.rs/repo/github/mxpv/pbrt4)
 
 A Rust crate to load [pbrt-v4](https://pbrt.org/fileformat-v4) files.
 
