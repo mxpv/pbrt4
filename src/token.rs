@@ -262,18 +262,27 @@ mod tests {
 
     #[test]
     fn parse_directive() {
-        assert_eq!(Directive::from_str("Shape"), Ok(Directive::Shape));
-        assert_eq!(Directive::from_str("Identity"), Ok(Directive::Identity));
-        assert_eq!(Directive::from_str("Material"), Ok(Directive::Material));
-        assert_eq!(Directive::from_str("Texture"), Ok(Directive::Texture));
-        assert_eq!(Directive::from_str("WorldBegin"), Ok(Directive::WorldBegin));
+        assert_eq!(Directive::from_str("Shape").unwrap(), Directive::Shape);
         assert_eq!(
-            Directive::from_str("AttributeBegin"),
-            Ok(Directive::AttributeBegin)
+            Directive::from_str("Identity").unwrap(),
+            Directive::Identity
         );
         assert_eq!(
-            Directive::from_str("AttributeEnd"),
-            Ok(Directive::AttributeEnd)
+            Directive::from_str("Material").unwrap(),
+            Directive::Material
+        );
+        assert_eq!(Directive::from_str("Texture").unwrap(), Directive::Texture);
+        assert_eq!(
+            Directive::from_str("WorldBegin").unwrap(),
+            Directive::WorldBegin
+        );
+        assert_eq!(
+            Directive::from_str("AttributeBegin").unwrap(),
+            Directive::AttributeBegin
+        );
+        assert_eq!(
+            Directive::from_str("AttributeEnd").unwrap(),
+            Directive::AttributeEnd
         );
     }
 

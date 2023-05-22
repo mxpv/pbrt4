@@ -478,6 +478,7 @@ impl Texture {
 }
 
 /// Materials specify the light scattering properties of surfaces in the scene.
+#[derive(Debug)]
 pub struct Material {
     pub ty: String,
 }
@@ -636,16 +637,16 @@ mod tests {
     #[test]
     fn parse_coord_sys() {
         assert_eq!(
-            CoordinateSystem::from_str("cameraworld"),
-            Ok(CoordinateSystem::CameraWorld)
+            CoordinateSystem::from_str("cameraworld").unwrap(),
+            CoordinateSystem::CameraWorld
         );
         assert_eq!(
-            CoordinateSystem::from_str("camera"),
-            Ok(CoordinateSystem::Camera)
+            CoordinateSystem::from_str("camera").unwrap(),
+            CoordinateSystem::Camera
         );
         assert_eq!(
-            CoordinateSystem::from_str("world"),
-            Ok(CoordinateSystem::World)
+            CoordinateSystem::from_str("world").unwrap(),
+            CoordinateSystem::World
         );
 
         assert!(CoordinateSystem::from_str("").is_err());

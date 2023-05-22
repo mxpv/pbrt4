@@ -1,6 +1,6 @@
 //! Scene loader
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fs, path::Path};
 
 use glam::{Mat4, Vec3};
 
@@ -66,6 +66,13 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// Load a scene from a file at path.
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Scene> {
+        let data = fs::read_to_string(path)?;
+        Self::load(&data)
+    }
+
+    /// Load scene from a string.
     pub fn load(data: &str) -> Result<Scene> {
         let mut scene = Scene::default();
         let mut parser = Parser::new(data);
@@ -84,7 +91,7 @@ impl Scene {
         loop {
             let element = match parser.parse_next() {
                 Ok(element) => element,
-                Err(err) if err == Error::EndOfFile => {
+                Err(err) if matches!(err, Error::EndOfFile) => {
                     // TODO: validate.
 
                     debug_assert!(states_stack.is_empty());

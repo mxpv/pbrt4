@@ -1,5 +1,3 @@
-use std::fs;
-
 use pbrt4::{
     types::{Camera, Light, Shape},
     Scene,
@@ -17,8 +15,7 @@ fn assert_eq_f32_arr<const N: usize>(a: [f32; N], b: [f32; N]) {
 
 #[test]
 fn disney_cloud() {
-    let data = fs::read_to_string("assets/disney-cloud/disney-cloud.pbrt").unwrap();
-    let scene = Scene::load(&data).unwrap();
+    let scene = Scene::from_file("assets/disney-cloud/disney-cloud.pbrt").unwrap();
 
     let camera = scene.camera.unwrap();
     let Camera::Perspective { fov, .. } = camera.params else {
@@ -66,11 +63,11 @@ fn disney_cloud() {
 
         assert_eq!(sphere.material_index, Some(1));
 
-        assert_eq_f32(radius, 1.44224957031);
+        assert_eq_f32(radius, 1.442_249_5);
 
         // Default parameters.
-        assert_eq_f32(zmin, -1.44224957031);
-        assert_eq_f32(zmax, 1.44224957031);
+        assert_eq_f32(zmin, -1.442_249_5);
+        assert_eq_f32(zmax, 1.442_249_5);
         assert_eq_f32(phimax, 360.0);
         assert_eq_f32(alpha, 1.0);
     }

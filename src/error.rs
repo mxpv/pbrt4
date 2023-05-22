@@ -1,11 +1,12 @@
 use std::{
+    io,
     num::{ParseFloatError, ParseIntError},
     str::ParseBoolError,
 };
 
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq, Eq)]
+#[derive(Error, Debug)]
 pub enum Error {
     /// No more tokens.
     #[error("No tokens")]
@@ -14,6 +15,9 @@ pub enum Error {
     /// Expected a token, but received `None`.
     #[error("Token expected, got end of stream")]
     NoToken,
+
+    #[error("Failed to read file")]
+    Io(#[from] io::Error),
 
     /// Token didn't pass basic validation checks.
     #[error("Invalid token")]

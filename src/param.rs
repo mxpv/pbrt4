@@ -236,7 +236,7 @@ mod tests {
 
         list.add(param.clone()).unwrap();
 
-        assert_eq!(list.add(param), Err(Error::DuplicatedParamName));
+        assert!(matches!(list.add(param), Err(Error::DuplicatedParamName)));
     }
 
     #[test]

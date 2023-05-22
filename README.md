@@ -20,13 +20,22 @@ A Rust crate to load [pbrt-v4](https://pbrt.org/fileformat-v4) files.
 - The file format [documentation](https://pbrt.org/fileformat-v4).
 - [pbrt-v4-scenes](https://github.com/mmp/pbrt-v4-scenes) repo.
 
-## Example
+## Getting started
+
+Add the following to your project's Cargo.toml:
+
+```
+pbrt4 = "0.1.0"
+```
+
+Reading a pbrt file is as easy as:
 
 ```rust
-let data = fs::read_to_string("file.pbrt")?;
-let scene = Scene::load(&data)?;
+let scene = Scene::from_file("file.pbrt")?;
 
 for shape in scene.shapes {
     println!("{:?}", shape)
 }
 ```
+
+Please refer to [examples](./examples) for more examples how to use the crate.
