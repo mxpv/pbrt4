@@ -19,6 +19,7 @@ pub enum ParamType {
     Rgb,
     Blackbody,
     String,
+    Texture,
 }
 
 impl FromStr for ParamType {
@@ -38,6 +39,7 @@ impl FromStr for ParamType {
             "rgb" => ParamType::Rgb,
             "blackbody" => ParamType::Blackbody,
             "string" => ParamType::String,
+            "texture" => ParamType::Texture,
             _ => return Err(Error::InvalidParamType),
         };
 
@@ -86,7 +88,7 @@ impl<'a> Param<'a> {
         let values = match ty {
             ParamType::Boolean => Values::Booleans(Vec::new()),
             ParamType::Integer | ParamType::Blackbody => Values::Integers(Vec::new()),
-            ParamType::String => Values::Strings(Vec::new()),
+            ParamType::String | ParamType::Texture => Values::Strings(Vec::new()),
             _ => Values::Floats(Vec::new()),
         };
 
@@ -304,6 +306,16 @@ mod tests {
         let i = param.as_spectrum().unwrap();
 
         assert!(matches!(i, Spectrum::Rgb(_)));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_texture() -> Result<()> {
+        let mut param = Param::new("texture test")?;
+        param.add_token(Token::new("\"float:textures/Fabric - Chaise longue\""))?;
+
+        let value = param.as_strings().unwrap().first().unwrap().to_owned();
+        assert_eq!(value, "float:textures/Fabric - Chaise longue");
         Ok(())
     }
 }
