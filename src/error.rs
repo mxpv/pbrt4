@@ -80,4 +80,7 @@ pub enum Error {
 
     #[error("Unknown object type")]
     InvalidObjectType,
+
+    #[error("Unexpted token received")]
+    UnexpectedToken,
 }

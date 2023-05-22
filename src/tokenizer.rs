@@ -63,7 +63,8 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn token(&self, start: usize, end: usize) -> Token<'a> {
-        Token::new(&self.str[start..end])
+        let token = Token::new(&self.str[start..end]);
+        dbg!(token)
     }
 }
 

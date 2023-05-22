@@ -213,12 +213,32 @@ impl<'a> Parser<'a> {
                 look_at: self.read_point()?,
                 up: self.read_point()?,
             },
-            Directive::Transform => Element::Transform {
-                m: self.read_matrix()?,
-            },
-            Directive::ConcatTransform => Element::ConcatTransform {
-                m: self.read_matrix()?,
-            },
+            Directive::Transform => {
+                // Skip [
+                self.skip_brace()?;
+
+                let elem = Element::Transform {
+                    m: self.read_matrix()?,
+                };
+
+                // Skip ]
+                self.skip_brace()?;
+
+                elem
+            }
+            Directive::ConcatTransform => {
+                // Skip [
+                self.skip_brace()?;
+
+                let elem = Element::ConcatTransform {
+                    m: self.read_matrix()?,
+                };
+
+                // Skip ]
+                self.skip_brace()?;
+
+                elem
+            }
             Directive::TransformTimes => Element::TransformTimes {
                 start: self.read_float()?,
                 end: self.read_float()?,
@@ -281,6 +301,22 @@ impl<'a> Parser<'a> {
         };
 
         Ok(element)
+    }
+
+    fn skip_brace(&mut self) -> Result<()> {
+        let Some(token) = self.tokenizer.next() else {
+            return Err(Error::UnexpectedToken);
+        };
+
+        let is_open = token.is_open_brace();
+        let is_close = token.is_close_brace();
+
+        // Not a brace
+        if !is_open && !is_close {
+            return Err(Error::UnexpectedToken);
+        }
+
+        Ok(())
     }
 
     /// Read next token or return [Error::UnexpectedEnd].
@@ -513,5 +549,21 @@ LookAt 0 5.5 24 0 11 -10 0 1 0
             parser.parse_next().unwrap(),
             Element::LookAt { .. }
         ));
+    }
+
+    #[test]
+    fn parse_transform() {
+        let mut parser = Parser::new("Transform [ 1 0 0 0 0 1 0 0 0 0 1 0 3 1 -4 1 ]");
+        let next = parser.parse_next().unwrap();
+
+        assert!(matches!(next, Element::Transform { .. }));
+    }
+
+    #[test]
+    fn parse_concat_transform() {
+        let mut parser = Parser::new("ConcatTransform [ 1 0 0 0 0 1 0 0 0 0 1 0 3 1 -4 1 ]");
+        let next = parser.parse_next().unwrap();
+
+        assert!(matches!(next, Element::ConcatTransform { .. }));
     }
 }
