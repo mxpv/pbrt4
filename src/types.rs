@@ -595,6 +595,9 @@ pub enum Shape {
         /// Per-vertex texture coordinates.
         uvs: Vec<f32>,
     },
+    /// pbrt can also directly read triangle meshes specified in the PLY mesh file format, via the "plymesh" shape.
+    /// TODO: Support loading ply files.
+    PlyMesh { filename: String },
 }
 
 impl Shape {
@@ -653,7 +656,15 @@ impl Shape {
                     tangents,
                 }
             }
-            _ => unimplemented!(),
+            "plymesh" => {
+                let filename = params
+                    .string("filename")
+                    .ok_or(Error::MissingRequiredParameter)?
+                    .to_string();
+
+                Shape::PlyMesh { filename }
+            }
+            _ => return Err(Error::InvalidObjectType),
         };
 
         Ok(shape)

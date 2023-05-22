@@ -83,4 +83,7 @@ pub enum Error {
 
     #[error("Unexpted token received")]
     UnexpectedToken,
+
+    #[error("Required param is missing")]
+    MissingRequiredParameter,
 }
