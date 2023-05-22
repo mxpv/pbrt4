@@ -7,8 +7,8 @@ use glam::{Mat4, Vec3};
 use crate::{
     param::ParamList,
     types::{
-        Accelerator, Camera, Film, Integrator, Light, Material, Medium, Options, Sampler, Shape,
-        Texture,
+        Accelerator, AreaLight, Camera, Film, Integrator, Light, Material, Medium, Options,
+        Sampler, Shape, Texture,
     },
     Element, Error, Parser, Result,
 };
@@ -26,7 +26,9 @@ pub struct State<'a> {
 
     pub current_inside_medium: Option<&'a str>,
     pub current_outside_medium: Option<&'a str>,
+
     pub material_index: Option<usize>,
+    pub area_light_index: Option<usize>,
 
     pub shape_params: ParamList<'a>,
     pub light_params: ParamList<'a>,
@@ -46,6 +48,7 @@ pub struct ShapeEntity {
     pub params: Shape,
     pub reverse_orientation: bool,
     pub material_index: Option<usize>,
+    pub area_light_index: Option<usize>,
 }
 
 #[derive(Default)]
@@ -61,6 +64,7 @@ pub struct Scene {
     pub textures: Vec<Texture>,
     pub materials: Vec<Material>,
     pub lights: Vec<Light>,
+    pub area_lights: Vec<AreaLight>,
     pub mediums: Vec<Medium>,
     pub shapes: Vec<ShapeEntity>,
 }
@@ -331,13 +335,20 @@ impl Scene {
                     let light = Light::new(ty, params)?;
                     scene.lights.push(light);
                 }
-                // Area lights have geometry associated with them.
-                //
                 // After an AreaLightSource directive, all subsequent shapes emit light
                 // from their surfaces according to the distribution defined by the given
                 // area light implementation.
-                Element::AreaLightSource { .. } => {
-                    unimplemented!()
+                Element::AreaLightSource { ty, mut params } => {
+                    params.extend(&current_state.light_params);
+                    let area_light = AreaLight::new(ty, params)?;
+
+                    let index = scene.area_lights.len();
+                    scene.area_lights.push(area_light);
+
+                    // The current area light is saved and restored inside attribute blocks;
+                    // typically area light definitions are inside an AttributeBegin/AttributeEnd
+                    // pair in order to control the shapes that they are applied to.
+                    current_state.area_light_index = Some(index);
                 }
                 Element::Shape {
                     name: ty,
@@ -354,6 +365,7 @@ impl Scene {
                         params: shape,
                         reverse_orientation: current_state.reverse_orientation,
                         material_index: current_state.material_index,
+                        area_light_index: current_state.area_light_index,
                     };
 
                     scene.shapes.push(entity);

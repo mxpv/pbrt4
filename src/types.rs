@@ -3,7 +3,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use crate::{
-    param::{Param, ParamList},
+    param::{Param, ParamList, Spectrum},
     Error, Result,
 };
 
@@ -171,7 +171,7 @@ impl Film {
                 .map_err(|_| Error::ParseSlice)?,
             diagonal: params.float("diagonal", 35.0),
             filename: params.string("filename").unwrap_or("pbrt.exr").to_owned(),
-            save_fp16: params.boolean("savefp16").unwrap_or(true),
+            save_fp16: params.boolean("savefp16", true),
             iso: params.float("iso", 100.0),
             white_balance: params.float("whitebalance", 0.0),
             sensor: params.string("sensor").unwrap_or("cie1931").to_owned(),
@@ -417,7 +417,7 @@ pub enum Light {
         /// If no filename is provided, the light will emit the same amount of radiance from every direction.
         filename: Option<String>,
         /// The spectral distribution of emission from the light.
-        l: Option<[f32; 3]>,
+        spectrum: Option<Spectrum>,
     },
     Point,
     Projection,
@@ -431,10 +431,7 @@ impl Light {
             "goniometric" => Light::GonioPhotometric,
             "infinite" => Light::Infinite {
                 filename: params.string("filename").map(|f| f.to_owned()),
-                l: match params.floats("L") {
-                    Some(f) => Some(f.try_into().map_err(|_| Error::ParseSlice)?),
-                    None => None,
-                },
+                spectrum: params.get("L").and_then(|s| s.as_spectrum()),
             },
             "point" => Light::Point,
             "projection" => Light::Projection,
@@ -443,6 +440,49 @@ impl Light {
         };
 
         Ok(light)
+    }
+}
+
+/// Area lights have geometry associated with them.
+#[derive(Debug)]
+pub enum AreaLight {
+    Diffuse {
+        /// Filename for an image that describes spatially-varying emission over the surface of the emitter.
+        /// The emitting shape's default (u,v) parameterization is used to map the image to the surface.
+        filename: Option<String>,
+        /// Determines whether the light source emits light from just the side of the surface
+        /// where the surface normal points or both sides.
+        two_sided: bool,
+        /// Spectral distribution of the light's emitted radiance.
+        spectrum: Option<Spectrum>,
+        /// Scale factor that modulates the amount of light that the light source emits into the scene.
+        scale: f32,
+    },
+}
+
+impl Default for AreaLight {
+    fn default() -> Self {
+        AreaLight::Diffuse {
+            filename: None,
+            two_sided: false,
+            spectrum: None,
+            scale: 1.0,
+        }
+    }
+}
+
+impl AreaLight {
+    pub fn new(ty: &str, params: ParamList) -> Result<AreaLight> {
+        // pbrt currently only includes a single area light implementation, "diffuse".
+        if ty != "diffuse" {
+            return Err(Error::InvalidParamType);
+        }
+        Ok(AreaLight::Diffuse {
+            filename: params.string("filename").map(|s| s.to_string()),
+            two_sided: params.boolean("twosided", false),
+            spectrum: params.get("L").and_then(|l| l.as_spectrum()),
+            scale: params.float("scale", 1.0),
+        })
     }
 }
 

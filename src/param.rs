@@ -45,6 +45,14 @@ impl FromStr for ParamType {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Spectrum {
+    //  "rgb L" [ r g b ]
+    Rgb([f32; 3]),
+    // "blackbody L" 3000
+    Blackbody(i32),
+}
+
 /// Values variant.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Values<'a> {
@@ -77,7 +85,7 @@ impl<'a> Param<'a> {
 
         let values = match ty {
             ParamType::Boolean => Values::Booleans(Vec::new()),
-            ParamType::Integer => Values::Integers(Vec::new()),
+            ParamType::Integer | ParamType::Blackbody => Values::Integers(Vec::new()),
             ParamType::String => Values::Strings(Vec::new()),
             _ => Values::Floats(Vec::new()),
         };
@@ -103,6 +111,30 @@ impl<'a> Param<'a> {
         }
 
         Ok(())
+    }
+
+    pub fn as_spectrum(&self) -> Option<Spectrum> {
+        let res = match self.ty {
+            // TODO: should we return an error if parse failed?
+            ParamType::Rgb => match self.as_floats().and_then(|f| f.try_into().ok()) {
+                Some(rgb) => Spectrum::Rgb(rgb),
+                None => return None,
+            },
+            ParamType::Blackbody => match self.as_integers().and_then(|s| s.first()).copied() {
+                Some(val) => Spectrum::Blackbody(val),
+                None => return None,
+            },
+            _ => return None,
+        };
+
+        Some(res)
+    }
+
+    pub fn as_rgb(&self) -> Option<[f32; 3]> {
+        match self.ty {
+            ParamType::Rgb => self.as_floats().and_then(|f| f.try_into().ok()),
+            _ => None,
+        }
     }
 
     pub fn as_floats(&self) -> Option<&[f32]> {
@@ -196,9 +228,10 @@ impl<'a> ParamList<'a> {
         self.strings(name).and_then(|strs| strs.first().copied())
     }
 
-    pub fn boolean(&self, name: &str) -> Option<bool> {
+    pub fn boolean(&self, name: &str, default: bool) -> bool {
         self.booleans(name)
             .and_then(|booleans| booleans.first().copied())
+            .unwrap_or(default)
     }
 
     pub fn extend(&mut self, other: &ParamList<'a>) {
@@ -248,5 +281,29 @@ mod tests {
 
         assert_eq!(param.as_integers(), Some([-1, 0, 1].as_slice()));
         assert_eq!(param.as_floats(), None);
+    }
+
+    #[test]
+    fn parse_blackbody() -> Result<()> {
+        let mut param = Param::new("blackbody I")?;
+        param.add_token(Token::new("5500"))?;
+
+        let i = param.as_spectrum().unwrap();
+
+        assert!(matches!(i, Spectrum::Blackbody(5500)));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_rgb() -> Result<()> {
+        let mut param = Param::new("rgb L")?;
+        param.add_token(Token::new("7"))?;
+        param.add_token(Token::new("0"))?;
+        param.add_token(Token::new("7"))?;
+
+        let i = param.as_spectrum().unwrap();
+
+        assert!(matches!(i, Spectrum::Rgb(_)));
+        Ok(())
     }
 }

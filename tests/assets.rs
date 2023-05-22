@@ -1,4 +1,5 @@
 use pbrt4::{
+    param::Spectrum,
     types::{Camera, Light, Shape},
     Scene,
 };
@@ -30,11 +31,15 @@ fn disney_cloud() {
     {
         let infinite = &scene.lights[0];
 
-        let Light::Infinite { l , ..} = infinite else {
+        let Light::Infinite { spectrum , ..} = infinite else {
             panic!("Unexpected light type at 0, want Infinite");
         };
 
-        assert_eq_f32_arr(l.unwrap(), [0.03, 0.07, 0.23]);
+        let Spectrum::Rgb(rgb) = spectrum.unwrap() else {
+            panic!("Unexpected spectrum value type");
+        };
+
+        assert_eq_f32_arr(rgb, [0.03, 0.07, 0.23]);
     }
 
     // Distant light
