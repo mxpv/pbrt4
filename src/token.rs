@@ -13,12 +13,6 @@ impl<'a> Token<'a> {
         Token { str }
     }
 
-    /// Returns `true` if token is a comment.
-    #[allow(dead_code)] // For unit testing
-    fn is_comment(&self) -> bool {
-        self.str.starts_with('#')
-    }
-
     /// Parse token.
     pub fn parse<F: FromStr>(&self) -> Result<F, <F as FromStr>::Err> {
         self.str.parse::<F>()
@@ -206,16 +200,6 @@ mod tests {
     use crate::token::Directive;
 
     use super::Token;
-
-    #[test]
-    fn is_comment() {
-        assert!(Token::new("# bar").is_comment());
-        assert!(Token::new("#bar").is_comment());
-        assert!(Token::new("#").is_comment());
-
-        assert!(!Token::new("").is_comment());
-        assert!(!Token::new("abc").is_comment());
-    }
 
     #[test]
     fn is_quote() {

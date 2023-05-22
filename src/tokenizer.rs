@@ -1,26 +1,14 @@
-use std::{iter::Peekable, str::CharIndices};
-
 use crate::token::Token;
 
+/// Tokenizer splits a string into an iterator of tokens.
 pub(crate) struct Tokenizer<'a> {
     str: &'a str,
-    chars: Peekable<CharIndices<'a>>,
-    skip_comments: bool,
+    offset: usize,
 }
 
 impl<'a> Tokenizer<'a> {
-    #[allow(dead_code)]
     pub fn new(str: &'a str) -> Self {
-        Self {
-            str,
-            chars: str.char_indices().peekable(),
-            skip_comments: false,
-        }
-    }
-
-    /// Skip comment tokens when iterating.
-    pub fn skip_comments(&mut self) {
-        self.skip_comments = true;
+        Self { str, offset: 0 }
     }
 
     fn rewind_until(&mut self, chars: &[char]) -> usize {
@@ -28,21 +16,50 @@ impl<'a> Tokenizer<'a> {
 
         loop {
             // Peek next char
-            let Some((_, ch)) = self.chars.peek() else {
+            let Some(ch) = self.peek_char() else {
                 break;
             };
 
-            if chars.contains(ch) {
+            if chars.contains(&ch) {
                 break;
             }
 
             // Take next char
-            if let Some((pos, _)) = self.chars.next() {
+            if let Some((pos, _)) = self.next_char() {
                 offset = pos;
             }
         }
 
         offset
+    }
+
+    fn peek_char(&mut self) -> Option<char> {
+        if self.offset > self.str.len() {
+            None
+        } else {
+            self.str[self.offset..].chars().next()
+        }
+    }
+
+    /// Get current char and step forward.
+    fn next_char(&mut self) -> Option<(usize, char)> {
+        match self.peek_char() {
+            Some(ch) => {
+                let offset = self.offset;
+                self.offset += 1;
+                Some((offset, ch))
+            }
+            None => None,
+        }
+    }
+
+    /// Get current token without moving forward.
+    pub fn peek_token(&mut self) -> Option<Token<'a>> {
+        let offset = self.offset;
+        let token = self.next();
+        self.offset = offset;
+
+        token
     }
 
     fn token(&self, start: usize, end: usize) -> Token<'a> {
@@ -55,7 +72,7 @@ impl<'a> Iterator for Tokenizer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let Some((start, ch)) = self.chars.next() else {
+            let Some((start, ch)) = self.next_char() else {
                 return None;
             };
 
@@ -66,20 +83,16 @@ impl<'a> Iterator for Tokenizer<'a> {
                     let mut end = self.rewind_until(&['"']);
 
                     // Consume remaining "
-                    if let Some((pos, _)) = self.chars.next() {
+                    if let Some((pos, _)) = self.next_char() {
                         end = pos;
                     }
 
                     self.token(start, end + 1)
                 }
                 '#' => {
-                    let end = self.rewind_until(&['\r', '\n']);
-
-                    if self.skip_comments {
-                        continue;
-                    }
-
-                    self.token(start, end + 1)
+                    // Skip comment line
+                    self.rewind_until(&['\r', '\n']);
+                    continue;
                 }
                 _ => {
                     let mut end = self.rewind_until(&[' ', '\r', '\n', '\t', '"', '[', ']']);
@@ -147,21 +160,6 @@ mod tests {
     }
 
     #[test]
-    fn comment_start() {
-        let str = r#"
-# Comment
-
-Scale
-
-"#;
-
-        let mut t = Tokenizer::new(str);
-
-        assert_eq!(t.next(), Some(Token::new("# Comment")));
-        assert_eq!(t.next(), Some(Token::new("Scale")));
-    }
-
-    #[test]
     fn skip_comments() {
         let str = r#"
 # Comment
@@ -171,7 +169,6 @@ Scale
 "#;
 
         let mut t = Tokenizer::new(str);
-        t.skip_comments();
 
         assert_eq!(t.next(), Some(Token::new("Scale")));
         assert_eq!(t.next(), None);
@@ -187,8 +184,6 @@ Scale
         let mut t = Tokenizer::new(str);
 
         assert_eq!(t.next(), Some(Token::new("Scale")));
-        assert_eq!(t.next(), Some(Token::new("# Comment")));
-
         assert_eq!(t.next(), None);
     }
 

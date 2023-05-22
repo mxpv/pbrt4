@@ -1,7 +1,5 @@
 //! Directives parser.
 
-use std::iter::Peekable;
-
 use crate::{
     param::{Param, ParamList},
     token::{Directive, Token},
@@ -145,17 +143,13 @@ pub enum Element<'a> {
 }
 
 pub struct Parser<'a> {
-    tokenizer: Peekable<Tokenizer<'a>>,
+    tokenizer: Tokenizer<'a>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(str: &'a str) -> Self {
-        let mut tok = Tokenizer::new(str);
-        tok.skip_comments();
-
-        Self {
-            tokenizer: tok.peekable(),
-        }
+        let tokenizer = Tokenizer::new(str);
+        Self { tokenizer }
     }
 
     /// Parse next element.
@@ -374,7 +368,7 @@ impl<'a> Parser<'a> {
         let mut list = ParamList::default();
 
         loop {
-            match self.tokenizer.peek() {
+            match self.tokenizer.peek_token() {
                 // Each parameter starts with a quoted string
                 Some(token) if token.is_quote() => {
                     let param = self.read_param()?;
