@@ -1,6 +1,6 @@
 //! Scene loader
 
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, env, fs, path::Path, slice, str};
 
 use glam::{Mat4, Vec3};
 
@@ -68,14 +68,25 @@ pub struct Scene {
 impl Scene {
     /// Load a scene from a file at path.
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Scene> {
+        let path = path.as_ref();
+
+        let working_directory = path.parent();
+
         let data = fs::read_to_string(path)?;
-        Self::load(&data)
+        Self::load(&data, working_directory)
     }
 
-    /// Load scene from a string.
-    pub fn load(data: &str) -> Result<Scene> {
+    /// Load a PBRT v4 scene from a string slice.
+    ///
+    /// # Arguments
+    /// - `data` is a string buffer with the file data.
+    /// - `working_directory` is a file's directory path which required for includes
+    /// with relative paths to work.
+    pub fn load(data: &str, working_directory: Option<&Path>) -> Result<Scene> {
         let mut scene = Scene::default();
-        let mut parser = Parser::new(data);
+
+        let mut parsers = Vec::new();
+        parsers.push(Parser::new(data));
 
         let mut current_state = State::default();
         let mut states_stack = Vec::new();
@@ -88,16 +99,18 @@ impl Scene {
         let mut named_materials: HashMap<String, usize> = HashMap::default();
         let mut named_mediums: HashMap<String, usize> = HashMap::default();
 
-        loop {
+        // Because data from included files might end up in cached parameters,
+        // we should keep the file data around until scene loading is done.
+        let mut includes = Vec::new();
+
+        while let Some(parser) = parsers.last_mut() {
+            // Fetch next element.
             let element = match parser.parse_next() {
                 Ok(element) => element,
                 Err(err) if matches!(err, Error::EndOfFile) => {
-                    // TODO: validate.
-
-                    debug_assert!(states_stack.is_empty());
-                    debug_assert!(is_world_block);
-
-                    break;
+                    // Remove parser from the stack.
+                    parsers.pop();
+                    continue;
                 }
                 Err(err) => return Err(err),
             };
@@ -210,8 +223,56 @@ impl Scene {
                 Element::TransformTimes { .. } | Element::ActiveTransform { .. } => {
                     todo!("Support animated transformations")
                 }
-                Element::Include(..) | Element::Import(..) => {
-                    todo!("Support includes/imports")
+                // Include behaves similarly to the #include directive in C++: parsing of the current file is suspended,
+                // the specified file is parsed in its entirety, and only then does parsing of the current file resume.
+                // Its effect is equivalent to direct text substitution of the included file.
+                Element::Include(path) => {
+                    // If the filename given to a Include or Import statement is not an absolute path,
+                    // its path is interpreted as being relative to the directory of the initial file being parsed as
+                    // specified with pbrt's command-line arguments.
+                    let path = Path::new(path);
+
+                    let full_path;
+
+                    let path = if path.is_absolute() {
+                        path
+                    } else {
+                        full_path = match working_directory {
+                            Some(directory) => directory.join(path),
+                            // Use current working directory if not provided
+                            None => env::current_dir()?.join(path),
+                        };
+
+                        full_path.as_path()
+                    };
+
+                    let data = fs::read_to_string(path)?;
+
+                    // Included files may be compressed using gzip.
+                    // If a scene file name has a ".gz" suffix, then pbrt will automatically decompress it as it is read from disk.
+                    if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+                        if ext.ends_with(".gz") {
+                            todo!("Gzip compression");
+                        }
+                    }
+
+                    // In Rust, String is heap allocated type, so it's safe to keep a pointer to
+                    // the raw data and move the String object (like push it to the vector).
+                    let raw = data.as_bytes();
+                    let raw_len = raw.len();
+                    let raw_ptr = raw.as_ptr();
+
+                    includes.push(data);
+
+                    // TODO: is there a better way?
+                    let parser = Parser::new(unsafe {
+                        let byte_slice = slice::from_raw_parts(raw_ptr, raw_len);
+                        str::from_utf8_unchecked(byte_slice)
+                    });
+                    parsers.push(parser);
+                }
+                Element::Import(..) => {
+                    todo!("Support imports")
                 }
                 Element::WorldBegin => {
                     is_world_block = true;
@@ -321,6 +382,44 @@ impl Scene {
             }
         }
 
+        debug_assert!(states_stack.is_empty());
+        debug_assert!(is_world_block);
+
         Ok(scene)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use tempdir::TempDir;
+
+    #[test]
+    fn test_includes() -> Result<()> {
+        let temp_dir = TempDir::new("pbrt-includes-")?;
+        let temp_path = temp_dir.path();
+
+        fs::write(temp_path.join("1.pbrt"), "Shape \"sphere\"")?;
+        fs::write(temp_path.join("2.pbrt"), "Include \"1.pbrt\" ")?;
+        fs::write(temp_path.join("3.pbrt"), "Include \"2.pbrt\" ")?;
+        fs::write(temp_path.join("4.pbrt"), "Include \"3.pbrt\" ")?;
+
+        fs::write(
+            temp_path.join("main.pbrt"),
+            r#"
+WorldBegin
+
+Include "4.pbrt" # Include file with nexted includes
+Include "1.pbrt" # Include shap directly
+
+        "#,
+        )?;
+
+        let scene = Scene::from_file(temp_path.join("main.pbrt"))?;
+
+        debug_assert_eq!(scene.shapes.len(), 2);
+
+        Ok(())
     }
 }

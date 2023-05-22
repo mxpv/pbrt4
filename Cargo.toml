@@ -11,3 +11,6 @@ keywords = ["pbrt", "pbrt-v4", "ray-tracing"]
 [dependencies]
 thiserror = "1.0"
 glam = "0.24"
+
+[dev-dependencies]
+tempdir = "0.3.7"
