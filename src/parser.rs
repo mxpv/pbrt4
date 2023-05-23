@@ -372,29 +372,38 @@ impl<'a> Parser<'a> {
     /// - "float iso" 150
     fn read_param(&mut self) -> Result<Param<'a>> {
         let type_and_name = self.read_str()?;
-        let mut param = Param::new(type_and_name)?;
+
+        let mut start = self.tokenizer.offset();
+        let end;
 
         // Either [ or a single value.
         let value = self.read_token()?;
+
         if value.is_open_brace() {
+            // Skip brace offset
+            start = self.tokenizer.offset();
+
             // Read array of values
             loop {
                 let value = self.read_token()?;
 
                 if value.is_close_brace() {
+                    end = self.tokenizer.offset() - 1;
                     break;
                 }
 
+                // Got directive without closing bracket token.
                 if value.is_directive() {
-                    return Err(Error::InvalidOptionValue);
+                    return Err(Error::UnexpectedToken);
                 }
-
-                param.add_token(value)?;
             }
         } else {
             // Single value
-            param.add_token(value)?;
+            end = start + value.token_size() + 1;
         }
+
+        let token = self.tokenizer.token(start, end);
+        let param = Param::new(type_and_name, token.value())?;
 
         Ok(param)
     }
@@ -489,8 +498,8 @@ Option \"string filename\" \"foo.exr\"
         ",
         );
 
-        let mut expected = Param::new("string filename").unwrap();
-        expected.add_token(Token::new("\"foo.exr\"")).unwrap();
+        let expected = Param::new("string filename", "\"foo.exr\"").unwrap();
+
         assert_eq!(
             parser.parse_next().unwrap(),
             Element::Option(expected.clone())

@@ -1,8 +1,13 @@
 //! Parameter management.
 
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::HashMap,
+    num::{ParseFloatError, ParseIntError},
+    result,
+    str::{FromStr, ParseBoolError},
+};
 
-use crate::{token::Token, Error, Result};
+use crate::{Error, Result};
 
 /// Parameter type.
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -55,15 +60,6 @@ pub enum Spectrum {
     Blackbody(i32),
 }
 
-/// Values variant.
-#[derive(Debug, PartialEq, Clone)]
-pub enum Values<'a> {
-    Floats(Vec<f32>),
-    Integers(Vec<i32>),
-    Strings(Vec<&'a str>),
-    Booleans(Vec<bool>),
-}
-
 /// Represents a single parsed parameter.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Param<'a> {
@@ -72,11 +68,11 @@ pub struct Param<'a> {
     /// Parameter type.
     pub ty: ParamType,
     /// One or more values.
-    values: Values<'a>,
+    value: &'a str,
 }
 
 impl<'a> Param<'a> {
-    pub fn new(type_and_name: &'a str) -> Result<Self> {
+    pub fn new(type_and_name: &'a str, value: &'a str) -> Result<Self> {
         // Param name is "type name"
         let mut split = type_and_name.split_whitespace();
 
@@ -85,86 +81,42 @@ impl<'a> Param<'a> {
 
         let name = split.next().ok_or(Error::InvalidParamName)?;
 
-        let values = match ty {
-            ParamType::Boolean => Values::Booleans(Vec::new()),
-            ParamType::Integer | ParamType::Blackbody => Values::Integers(Vec::new()),
-            ParamType::String | ParamType::Texture => Values::Strings(Vec::new()),
-            _ => Values::Floats(Vec::new()),
-        };
-
-        Ok(Self { name, ty, values })
+        Ok(Self { name, ty, value })
     }
 
-    pub fn add_token(&mut self, token: Token<'a>) -> Result<()> {
-        match &mut self.values {
-            Values::Floats(ref mut floats) => {
-                floats.push(token.parse()?);
-            }
-            Values::Integers(ref mut ints) => {
-                ints.push(token.parse()?);
-            }
-            Values::Strings(ref mut strs) => {
-                let str = token.unquote().ok_or(Error::InvalidToken)?;
-                strs.push(str);
-            }
-            Values::Booleans(ref mut booleans) => {
-                booleans.push(token.parse()?);
-            }
-        }
-
-        Ok(())
+    pub fn items<T: FromStr>(
+        &self,
+    ) -> impl Iterator<Item = result::Result<T, <T as FromStr>::Err>> + 'a {
+        self.value.split_whitespace().map(|str| T::from_str(str))
     }
 
-    pub fn as_spectrum(&self) -> Option<Spectrum> {
+    pub fn rgb(&self) -> Result<[f32; 3]> {
+        let mut iter = self.items::<f32>();
+
+        let r = iter.next().ok_or(Error::MissingRequiredParameter)??;
+        let g = iter.next().ok_or(Error::MissingRequiredParameter)??;
+        let b = iter.next().ok_or(Error::MissingRequiredParameter)??;
+
+        Ok([r, g, b])
+    }
+
+    pub fn single<T: FromStr>(&self) -> result::Result<T, <T as FromStr>::Err> {
+        T::from_str(self.value)
+    }
+
+    pub fn vec<T: FromStr>(&self) -> result::Result<Vec<T>, <T as FromStr>::Err> {
+        self.items()
+            .collect::<result::Result<Vec<T>, <T as FromStr>::Err>>()
+    }
+
+    pub fn spectrum(&self) -> Result<Spectrum> {
         let res = match self.ty {
-            // TODO: should we return an error if parse failed?
-            ParamType::Rgb => match self.as_floats().and_then(|f| f.try_into().ok()) {
-                Some(rgb) => Spectrum::Rgb(rgb),
-                None => return None,
-            },
-            ParamType::Blackbody => match self.as_integers().and_then(|s| s.first()).copied() {
-                Some(val) => Spectrum::Blackbody(val),
-                None => return None,
-            },
-            _ => return None,
+            ParamType::Rgb => Spectrum::Rgb(self.rgb()?),
+            ParamType::Blackbody => Spectrum::Blackbody(self.single()?),
+            _ => return Err(Error::InvalidObjectType),
         };
 
-        Some(res)
-    }
-
-    pub fn as_rgb(&self) -> Option<[f32; 3]> {
-        match self.ty {
-            ParamType::Rgb => self.as_floats().and_then(|f| f.try_into().ok()),
-            _ => None,
-        }
-    }
-
-    pub fn as_floats(&self) -> Option<&[f32]> {
-        match &self.values {
-            Values::Floats(ref v) => Some(v.as_slice()),
-            _ => None,
-        }
-    }
-
-    pub fn as_integers(&self) -> Option<&[i32]> {
-        match &self.values {
-            Values::Integers(ref v) => Some(v.as_slice()),
-            _ => None,
-        }
-    }
-
-    pub fn as_strings(&self) -> Option<&[&str]> {
-        match &self.values {
-            Values::Strings(ref s) => Some(s.as_slice()),
-            _ => None,
-        }
-    }
-
-    pub fn as_booleans(&self) -> Option<&[bool]> {
-        match &self.values {
-            Values::Booleans(ref b) => Some(b.as_slice()),
-            _ => None,
-        }
+        Ok(res)
     }
 }
 
@@ -197,43 +149,50 @@ impl<'a> ParamList<'a> {
         self.0.is_empty()
     }
 
-    /// Attempt to get parameter as a slice of `f32`.
-    pub fn floats(&self, name: &str) -> Option<&[f32]> {
-        self.get(name).and_then(|param| param.as_floats())
+    fn vec<T: FromStr>(&self, name: &str) -> result::Result<Option<Vec<T>>, <T as FromStr>::Err> {
+        let res = match self.get(name).map(|param| param.vec()) {
+            Some(v) => Some(v?),
+            None => None,
+        };
+
+        Ok(res)
     }
 
-    pub fn integers(&self, name: &str) -> Option<&[i32]> {
-        self.get(name).and_then(|param| param.as_integers())
+    pub fn floats(&self, name: &str) -> result::Result<Option<Vec<f32>>, ParseFloatError> {
+        self.vec(name)
     }
 
-    pub fn strings(&self, name: &str) -> Option<&[&str]> {
-        self.get(name).and_then(|param| param.as_strings())
+    pub fn integers(&self, name: &str) -> result::Result<Option<Vec<i32>>, ParseIntError> {
+        self.vec(name)
     }
 
-    pub fn booleans(&self, name: &str) -> Option<&[bool]> {
-        self.get(name).and_then(|param| param.as_booleans())
+    fn single<T: FromStr>(&self, name: &str, default: T) -> result::Result<T, <T as FromStr>::Err> {
+        self.get(name)
+            .map(|p| p.single::<T>())
+            .unwrap_or(Ok(default))
     }
 
-    pub fn float(&self, name: &str, default: f32) -> f32 {
-        self.floats(name)
-            .and_then(|floats| floats.first().copied())
-            .unwrap_or(default)
+    /// Get a float value by name.
+    ///
+    /// If there is no parameter with name `name`, a `default` value will
+    /// be returned.
+    ///
+    /// If there is a value and it's not possible to parse it into float,
+    /// an error will be returned.
+    pub fn float(&self, name: &str, default: f32) -> result::Result<f32, ParseFloatError> {
+        self.single(name, default)
     }
 
-    pub fn integer(&self, name: &str, default: i32) -> i32 {
-        self.integers(name)
-            .and_then(|ints| ints.first().copied())
-            .unwrap_or(default)
+    pub fn integer(&self, name: &str, default: i32) -> result::Result<i32, ParseIntError> {
+        self.single(name, default)
+    }
+
+    pub fn boolean(&self, name: &str, default: bool) -> result::Result<bool, ParseBoolError> {
+        self.single(name, default)
     }
 
     pub fn string(&self, name: &str) -> Option<&str> {
-        self.strings(name).and_then(|strs| strs.first().copied())
-    }
-
-    pub fn boolean(&self, name: &str, default: bool) -> bool {
-        self.booleans(name)
-            .and_then(|booleans| booleans.first().copied())
-            .unwrap_or(default)
+        self.get(name).map(|v| v.value)
     }
 
     pub fn extend(&mut self, other: &ParamList<'a>) {
@@ -267,8 +226,7 @@ mod tests {
     fn add_dup_param() {
         let mut list = ParamList::default();
 
-        let param = Param::new("bool dup_name").unwrap();
-
+        let param = Param::new("bool dup_name", "true").unwrap();
         list.add(param.clone()).unwrap();
 
         assert!(matches!(list.add(param), Err(Error::DuplicatedParamName)));
@@ -276,21 +234,16 @@ mod tests {
 
     #[test]
     fn as_ints() {
-        let mut param = Param::new("integer test").unwrap();
-        param.add_token(Token::new("-1")).unwrap();
-        param.add_token(Token::new("0")).unwrap();
-        param.add_token(Token::new("1")).unwrap();
+        let param = Param::new("integer test", "-1 0 1").unwrap();
 
-        assert_eq!(param.as_integers(), Some([-1, 0, 1].as_slice()));
-        assert_eq!(param.as_floats(), None);
+        assert_eq!(param.vec::<i32>().unwrap(), vec![-1, 0, 1]);
     }
 
     #[test]
     fn parse_blackbody() -> Result<()> {
-        let mut param = Param::new("blackbody I")?;
-        param.add_token(Token::new("5500"))?;
+        let param = Param::new("blackbody I", "5500")?;
 
-        let i = param.as_spectrum().unwrap();
+        let i = param.spectrum().unwrap();
 
         assert!(matches!(i, Spectrum::Blackbody(5500)));
         Ok(())
@@ -298,24 +251,10 @@ mod tests {
 
     #[test]
     fn parse_rgb() -> Result<()> {
-        let mut param = Param::new("rgb L")?;
-        param.add_token(Token::new("7"))?;
-        param.add_token(Token::new("0"))?;
-        param.add_token(Token::new("7"))?;
-
-        let i = param.as_spectrum().unwrap();
+        let param = Param::new("rgb L", "7 0 7")?;
+        let i = param.spectrum().unwrap();
 
         assert!(matches!(i, Spectrum::Rgb(_)));
-        Ok(())
-    }
-
-    #[test]
-    fn parse_texture() -> Result<()> {
-        let mut param = Param::new("texture test")?;
-        param.add_token(Token::new("\"float:textures/Fabric - Chaise longue\""))?;
-
-        let value = param.as_strings().unwrap().first().unwrap().to_owned();
-        assert_eq!(value, "float:textures/Fabric - Chaise longue");
         Ok(())
     }
 }

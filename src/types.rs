@@ -154,28 +154,28 @@ impl Film {
                     .to_owned(),
             },
             "spectral" => FilmType::Spectral {
-                nbuckets: params.integer("nbuckets", 16),
-                lambda_min: params.float("lambdamin", 360.0),
-                lambda_max: params.float("lambdamax", 830.0),
+                nbuckets: params.integer("nbuckets", 16)?,
+                lambda_min: params.float("lambdamin", 360.0)?,
+                lambda_max: params.float("lambdamax", 830.0)?,
             },
             _ => unimplemented!(),
         };
 
         let film = Film {
-            xresolution: params.integer("xresolution", 1280),
-            yresolution: params.integer("yresolution", 720),
+            xresolution: params.integer("xresolution", 1280)?,
+            yresolution: params.integer("yresolution", 720)?,
             crop_window: params
-                .floats("cropwindow")
-                .unwrap_or(&[0.0, 1.0, 0.0, 1.0])
+                .floats("cropwindow")?
+                .unwrap_or_else(|| vec![0.0, 1.0, 0.0, 1.0])
                 .try_into()
                 .map_err(|_| Error::ParseSlice)?,
-            diagonal: params.float("diagonal", 35.0),
+            diagonal: params.float("diagonal", 35.0)?,
             filename: params.string("filename").unwrap_or("pbrt.exr").to_owned(),
-            save_fp16: params.boolean("savefp16", true),
-            iso: params.float("iso", 100.0),
-            white_balance: params.float("whitebalance", 0.0),
+            save_fp16: params.boolean("savefp16", true)?,
+            iso: params.float("iso", 100.0)?,
+            white_balance: params.float("whitebalance", 0.0)?,
             sensor: params.string("sensor").unwrap_or("cie1931").to_owned(),
-            max_component_value: params.float("maxcomponentvalue", f32::MAX),
+            max_component_value: params.float("maxcomponentvalue", f32::MAX)?,
             ty,
         };
 
@@ -232,8 +232,8 @@ pub enum Camera {
 impl Camera {
     pub fn new(ty: &str, params: ParamList) -> Result<Camera> {
         // Two parameters that set the camera's shutter open times are common to all cameras in pbrt.
-        let shutter_open = params.float("shutteropen", 0.0);
-        let shutter_close = params.float("shutterclose", 1.0);
+        let shutter_open = params.float("shutteropen", 0.0)?;
+        let shutter_close = params.float("shutterclose", 1.0)?;
 
         let camera = match ty {
             "orthographic" => Camera::Orthographic {
@@ -243,14 +243,14 @@ impl Camera {
             "perspective" => Camera::Perspective {
                 shutter_open,
                 shutter_close,
-                fov: params.float("fov", 90.0),
+                fov: params.float("fov", 90.0)?,
             },
             "realistic" => Camera::Realistic {
                 shutter_open,
                 shutter_close,
                 lensfile: params.string("lensfile").map(|str| str.to_string()),
-                aperture_diameter: params.float("aperturediameter", 1.0),
-                focus_distance: params.float("focusdistance", 10.0),
+                aperture_diameter: params.float("aperturediameter", 1.0)?,
+                focus_distance: params.float("focusdistance", 10.0)?,
                 aperture: params.string("aperture").map(|str| str.to_string()),
             },
             "spherical" => Camera::Spherical {
@@ -302,7 +302,7 @@ impl Integrator {
     pub fn new(ty: &str, params: ParamList) -> Result<Integrator> {
         let integ = match ty {
             "volpath" => Integrator::VolPath {
-                max_depth: params.integer("maxdepth", 5),
+                max_depth: params.integer("maxdepth", 5)?,
             },
             _ => unimplemented!(),
         };
@@ -352,7 +352,7 @@ impl Accelerator {
     pub fn new(ty: &str, params: ParamList) -> Result<Accelerator> {
         let acc = match ty {
             "bvh" => Accelerator::Bvh {
-                max_node_prims: params.integer("maxnodeprims", 4),
+                max_node_prims: params.integer("maxnodeprims", 4)?,
                 split_method: match params.string("splitmethod").unwrap_or("sah") {
                     "sah" => BvhSplitMethod::Sah,
                     "middle" => BvhSplitMethod::Middle,
@@ -362,11 +362,11 @@ impl Accelerator {
                 },
             },
             "kdtree" => Accelerator::KdTree {
-                intersect_cost: params.integer("intersectcost", 5),
-                traversal_cost: params.integer("traversalcost", 1),
-                empty_bonus: params.float("emptybonus", 0.5),
-                max_prims: params.integer("maxprims", 1),
-                max_depth: params.integer("maxdepth", -1),
+                intersect_cost: params.integer("intersectcost", 5)?,
+                traversal_cost: params.integer("traversalcost", 1)?,
+                empty_bonus: params.float("emptybonus", 0.5)?,
+                max_prims: params.integer("maxprims", 1)?,
+                max_depth: params.integer("maxdepth", -1)?,
             },
             _ => return Err(Error::InvalidString),
         };
@@ -431,7 +431,7 @@ impl Light {
             "goniometric" => Light::GonioPhotometric,
             "infinite" => Light::Infinite {
                 filename: params.string("filename").map(|f| f.to_owned()),
-                spectrum: params.get("L").and_then(|s| s.as_spectrum()),
+                spectrum: params.get("L").map(|s| s.spectrum()).transpose()?,
             },
             "point" => Light::Point,
             "projection" => Light::Projection,
@@ -479,9 +479,9 @@ impl AreaLight {
         }
         Ok(AreaLight::Diffuse {
             filename: params.string("filename").map(|s| s.to_string()),
-            two_sided: params.boolean("twosided", false),
-            spectrum: params.get("L").and_then(|l| l.as_spectrum()),
-            scale: params.float("scale", 1.0),
+            two_sided: params.boolean("twosided", false)?,
+            spectrum: params.get("L").map(|l| l.spectrum()).transpose()?,
+            scale: params.float("scale", 1.0)?,
         })
     }
 }
@@ -604,48 +604,48 @@ impl Shape {
     pub fn new(ty: &str, params: ParamList) -> Result<Self> {
         // All shapes take an optional "alpha" parameter that can be
         // used to define a mask that cuts away regions of a surface.
-        let alpha = params.float("alpha", 1.0);
+        let alpha = params.float("alpha", 1.0)?;
 
         let shape = match ty {
             "cylinder" => Shape::Cylinder {
                 alpha,
-                radius: params.float("radius", 1.0),
-                zmin: params.float("zmin", -1.0),
-                zmax: params.float("zmax", 1.0),
-                phimax: params.float("phimax", 360.0),
+                radius: params.float("radius", 1.0)?,
+                zmin: params.float("zmin", -1.0)?,
+                zmax: params.float("zmax", 1.0)?,
+                phimax: params.float("phimax", 360.0)?,
             },
             "disk" => Shape::Disk {
                 alpha,
-                height: params.float("height", 0.0),
-                radius: params.float("radius", 1.0),
-                innerradius: params.float("innerradius", 0.0),
-                phimax: params.float("phimax", 360.0),
+                height: params.float("height", 0.0)?,
+                radius: params.float("radius", 1.0)?,
+                innerradius: params.float("innerradius", 0.0)?,
+                phimax: params.float("phimax", 360.0)?,
             },
             "sphere" => {
-                let radius = params.float("radius", 1.0);
+                let radius = params.float("radius", 1.0)?;
 
-                let zmin = params.float("zmin", -radius);
-                let zmax = params.float("zmax", radius);
+                let zmin = params.float("zmin", -radius)?;
+                let zmax = params.float("zmax", radius)?;
 
                 Shape::Sphere {
                     alpha,
                     radius,
                     zmin,
                     zmax,
-                    phimax: params.float("phimax", 360.0),
+                    phimax: params.float("phimax", 360.0)?,
                 }
             }
             "trianglemesh" => {
                 // TODO: Positions and indices are required, return error if not provided.
-                let indices = Vec::from(params.integers("indices").unwrap_or_default());
+                let indices = params.integers("indices")?.unwrap_or_default();
                 debug_assert_eq!(indices.len() % 3, 0);
 
-                let positions = Vec::from(params.floats("P").unwrap_or_default());
+                let positions = params.floats("P")?.unwrap_or_default();
 
-                let normals = Vec::from(params.floats("N").unwrap_or_default());
-                let tangents = Vec::from(params.floats("S").unwrap_or_default());
+                let normals = params.floats("N")?.unwrap_or_default();
+                let tangents = params.floats("S")?.unwrap_or_default();
 
-                let uvs = Vec::from(params.floats("uv").unwrap_or_default());
+                let uvs = params.floats("uv")?.unwrap_or_default();
 
                 Shape::TriangleMesh {
                     alpha,

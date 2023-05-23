@@ -13,6 +13,16 @@ impl<'a> Token<'a> {
         Token { str }
     }
 
+    /// Returns the number of chars in the token.
+    pub fn token_size(&self) -> usize {
+        self.str.len()
+    }
+
+    /// Returns token's value.
+    pub fn value(&self) -> &'a str {
+        self.str.trim()
+    }
+
     /// Parse token.
     pub fn parse<F: FromStr>(&self) -> Result<F, <F as FromStr>::Err> {
         self.str.parse::<F>()
