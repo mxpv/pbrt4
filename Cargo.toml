@@ -1,7 +1,7 @@
 [package]
 name = "pbrt4"
 description = "Lightweight and fast PBRT v4 file parser"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 repository = "https://github.com/mxpv/pbrt4"
 license = "Apache-2.0"
