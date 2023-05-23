@@ -77,3 +77,11 @@ fn disney_cloud() {
         assert_eq_f32(alpha, 1.0);
     }
 }
+
+#[test]
+fn kroken() {
+    let scene = Scene::from_file("assets/kroken/camera-1.pbrt").unwrap();
+    assert_eq!(scene.instances.len(), 10);
+
+    assert_eq!(scene.textures.len(), 74);
+}
