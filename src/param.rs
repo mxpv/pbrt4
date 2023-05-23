@@ -25,6 +25,7 @@ pub enum ParamType {
     Blackbody,
     String,
     Texture,
+    Normal,
 }
 
 impl FromStr for ParamType {
@@ -45,6 +46,7 @@ impl FromStr for ParamType {
             "blackbody" => ParamType::Blackbody,
             "string" => ParamType::String,
             "texture" => ParamType::Texture,
+            "normal" => ParamType::Normal,
             _ => return Err(Error::InvalidParamType),
         };
 
