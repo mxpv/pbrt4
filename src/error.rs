@@ -86,4 +86,10 @@ pub enum Error {
 
     #[error("Required param is missing")]
     MissingRequiredParameter,
+
+    #[error("Nested object attributes are not allowed")]
+    NestedObjects,
+
+    #[error("Not found")]
+    NotFound,
 }

@@ -17,24 +17,28 @@ use crate::{
 /// Examples include the transformation directives (Transformations),
 /// and the directive that sets the current material.
 #[derive(Default, Clone)]
-pub struct State<'a> {
+struct State<'a> {
     /// The reverse-orientation setting, specified by the `ReverseOrientation`
     /// directive, is part of the graphics state.
-    pub reverse_orientation: bool,
+    reverse_orientation: bool,
 
-    pub transform_matrix: Mat4,
+    transform_matrix: Mat4,
 
-    pub current_inside_medium: Option<&'a str>,
-    pub current_outside_medium: Option<&'a str>,
+    current_inside_medium: Option<&'a str>,
+    current_outside_medium: Option<&'a str>,
 
-    pub material_index: Option<usize>,
-    pub area_light_index: Option<usize>,
+    material_index: Option<usize>,
+    area_light_index: Option<usize>,
 
-    pub shape_params: ParamList<'a>,
-    pub light_params: ParamList<'a>,
-    pub material_params: ParamList<'a>,
-    pub medium_params: ParamList<'a>,
-    pub texture_params: ParamList<'a>,
+    /// Between `ObjectBegin` and `ObjectEnd` if `Some`.
+    active_object: Option<usize>,
+    shape_count: usize,
+
+    shape_params: ParamList<'a>,
+    light_params: ParamList<'a>,
+    material_params: ParamList<'a>,
+    medium_params: ParamList<'a>,
+    texture_params: ParamList<'a>,
 }
 
 #[derive(Debug)]
@@ -46,16 +50,35 @@ pub struct CameraEntity {
 #[derive(Debug)]
 pub struct ShapeEntity {
     pub params: Shape,
+    /// If shape is a part of [Object], transform matrix defines the transformation from
+    /// object space to the instance's coordinate space.
+    pub transform: Mat4,
     pub reverse_orientation: bool,
     pub material_index: Option<usize>,
     pub area_light_index: Option<usize>,
 }
 
+#[derive(Debug, Clone)]
+pub struct Object {
+    pub name: String,
+    pub shape_start: Option<usize>,
+    pub shape_count: usize,
+    pub object_to_instance: Mat4,
+}
+
+#[derive(Debug)]
+pub struct Instance {
+    pub instance_to_world: Mat4,
+    pub object_index: usize,
+    pub area_light_index: Option<usize>,
+    pub reverse_orientation: bool,
+}
+
 #[derive(Default)]
 pub struct Scene {
-    /// Global options.
+    pub start_time: f32,
+    pub end_time: f32,
     pub options: Options,
-    /// Camera.
     pub camera: Option<CameraEntity>,
     pub film: Option<Film>,
     pub integrator: Option<Integrator>,
@@ -67,6 +90,8 @@ pub struct Scene {
     pub area_lights: Vec<AreaLight>,
     pub mediums: Vec<Medium>,
     pub shapes: Vec<ShapeEntity>,
+    pub objects: Vec<Object>,
+    pub instances: Vec<Instance>,
 }
 
 impl Scene {
@@ -102,6 +127,7 @@ impl Scene {
         let mut named_textures: HashMap<String, usize> = HashMap::default();
         let mut named_materials: HashMap<String, usize> = HashMap::default();
         let mut named_mediums: HashMap<String, usize> = HashMap::default();
+        let mut named_objects: HashMap<String, usize> = HashMap::default();
 
         // Because data from included files might end up in cached parameters,
         // we should keep the file data around until scene loading is done.
@@ -224,7 +250,20 @@ impl Scene {
                     debug_assert!(scene.sampler.is_none());
                     scene.sampler = Some(sampler);
                 }
-                Element::TransformTimes { .. } | Element::ActiveTransform { .. } => {
+                // pbrt supports animated transformations by allowing two transformation
+                // matrices to be specified at different times.
+                Element::TransformTimes { start, end } => {
+                    // TransformTimes directive must be outside of the world definition block,
+                    if is_world_block {
+                        return Err(Error::WorldAlreadyStarted);
+                    }
+
+                    scene.start_time = start;
+                    scene.end_time = end;
+                }
+                // ActiveTransform directive indicates whether subsequent directives that modify the CTM should
+                // apply to the transformation at the starting time, the transformation at the ending time, or both.
+                Element::ActiveTransform { .. } => {
                     todo!("Support animated transformations")
                 }
                 // Include behaves similarly to the #include directive in C++: parsing of the current file is suspended,
@@ -363,17 +402,76 @@ impl Scene {
 
                     let entity = ShapeEntity {
                         params: shape,
+                        transform: current_state.transform_matrix,
                         reverse_orientation: current_state.reverse_orientation,
                         material_index: current_state.material_index,
                         area_light_index: current_state.area_light_index,
                     };
 
                     scene.shapes.push(entity);
+
+                    // If inside of ObjectBegin/ObjectEnd, count the number of shapes.
+                    if current_state.active_object.is_some() {
+                        current_state.shape_count += 1;
+                    }
                 }
-                Element::ObjectBegin { .. }
-                | Element::ObjectEnd
-                | Element::ObjectInstance { .. } => {
-                    todo!("Support object instancing");
+                Element::ObjectBegin { name } => {
+                    if current_state.active_object.is_some() {
+                        // Nested objects are not allowed
+                        return Err(Error::NestedObjects);
+                    }
+
+                    states_stack.push(current_state.clone());
+
+                    let object = Object {
+                        name: name.to_string(),
+                        shape_start: None,
+                        shape_count: 0,
+                        object_to_instance: current_state.transform_matrix,
+                    };
+
+                    let index = scene.objects.len();
+                    scene.objects.push(object);
+
+                    current_state.active_object = Some(index);
+                    named_objects.insert(name.to_string(), index);
+                }
+                Element::ObjectEnd => {
+                    let object_index = current_state
+                        .active_object
+                        .take()
+                        .ok_or(Error::ElementNotAllowed)?;
+
+                    let object = &mut scene.objects[object_index];
+
+                    object.shape_count = current_state.shape_count;
+
+                    if object.shape_count > 0 {
+                        object.shape_start = Some(scene.shapes.len() - object.shape_count)
+                    }
+
+                    current_state.shape_count = 0;
+                    current_state.active_object = None;
+
+                    match states_stack.pop() {
+                        Some(state) => current_state = state,
+                        None => return Err(Error::ElementNotAllowed),
+                    }
+                }
+                Element::ObjectInstance { name } => {
+                    let Some(object_index) = named_objects.get(name).copied() else {
+                        return Err(Error::NotFound)
+                    };
+
+                    let instance = Instance {
+                        // The current transformation matrix defines the world from instance space transformation.
+                        instance_to_world: current_state.transform_matrix,
+                        object_index,
+                        area_light_index: current_state.area_light_index,
+                        reverse_orientation: current_state.reverse_orientation,
+                    };
+
+                    scene.instances.push(instance);
                 }
                 // MakeNamedMedium associates a user-specified name with medium scattering characteristics.
                 Element::MakeNamedMedium { name, mut params } => {
@@ -431,6 +529,47 @@ Include "1.pbrt" # Include shap directly
         let scene = Scene::from_file(temp_path.join("main.pbrt"))?;
 
         debug_assert_eq!(scene.shapes.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_instancing() -> Result<()> {
+        let data = r#"
+WorldBegin
+
+ObjectBegin "foo"
+Shape "sphere"
+Shape "sphere"
+ObjectEnd
+
+ObjectInstance "foo"
+Translate 1 0 0
+ObjectInstance "foo"
+        "#;
+
+        let scene = Scene::load(data, None)?;
+
+        assert_eq!(scene.shapes.len(), 2);
+
+        assert!(matches!(scene.shapes[0].params, Shape::Sphere { .. }));
+        assert!(matches!(scene.shapes[0].params, Shape::Sphere { .. }));
+
+        assert_eq!(scene.objects.len(), 1);
+
+        let object = &scene.objects[0];
+        assert_eq!(&object.name, "foo");
+        assert_eq!(object.shape_start, Some(0));
+        assert_eq!(object.shape_count, 2);
+
+        assert_eq!(scene.instances.len(), 2);
+
+        let inst1 = &scene.instances[0];
+        assert_eq!(inst1.object_index, 0);
+
+        let inst2 = &scene.instances[1];
+        assert_eq!(inst1.object_index, 0);
+        assert_ne!(inst1.instance_to_world, inst2.instance_to_world);
 
         Ok(())
     }
